@@ -21,6 +21,10 @@
   function rnd(a, b) { return a + Math.random() * (b - a); }
   function ri(n) { return Math.floor(Math.random() * n); }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function shade(hex, amt) {   // lighten (+) / darken (-) a #rrggbb colour
+    var n = parseInt(hex.slice(1), 16), r = (n >> 16) + amt, g = ((n >> 8) & 255) + amt, b = (n & 255) + amt;
+    return 'rgb(' + clamp(r, 0, 255) + ',' + clamp(g, 0, 255) + ',' + clamp(b, 0, 255) + ')';
+  }
 
   /* ---------- state ---------- */
   var S, player, ARENA = 'dojo';
@@ -329,96 +333,184 @@
     ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.fill(); ctx.restore(); }
 
   function drawArena(A) {
-    var g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, A.sky); g.addColorStop(1, '#070504');
+    var g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, A.sky); g.addColorStop(1, '#060403');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     if (ARENA === 'tokyo') drawTokyo(A); else drawDojoBg(A);
-    // the dojo ring (the arena floor), projected as an ellipse
+    // arena floor, projected as an ellipse
     ctx.save(); ctx.translate(CX, CY); ctx.scale(1, DEPTH);
-    var fg = ctx.createRadialGradient(0, -R * 0.2, R * 0.1, 0, 0, R * 1.05);
-    fg.addColorStop(0, A.floor); fg.addColorStop(1, A.floor2);
+    var fg = ctx.createRadialGradient(0, -R * 0.25, R * 0.1, 0, 0, R * 1.1);
+    fg.addColorStop(0, shade(A.floor, 24)); fg.addColorStop(0.7, A.floor); fg.addColorStop(1, A.floor2);
     ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.283); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 2 * DPR;
+    // plank / tatami seams
+    ctx.strokeStyle = 'rgba(0,0,0,.28)'; ctx.lineWidth = 2 * DPR;
+    for (var a = 0; a < 12; a++) { var an = a / 12 * 6.283; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(an) * R, Math.sin(an) * R); ctx.stroke(); }
     for (var i = 1; i <= 3; i++) { ctx.beginPath(); ctx.arc(0, 0, R * i / 3.2, 0, 6.283); ctx.stroke(); }
-    // centre mark
-    ctx.strokeStyle = A.glow; ctx.globalAlpha = 0.5; ctx.lineWidth = 3 * DPR; ctx.beginPath(); ctx.arc(0, 0, R * 0.14, 0, 6.283); ctx.stroke(); ctx.globalAlpha = 1;
+    // centre emblem (a faint kanji) + glow ring
+    ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.font = '800 ' + (R * 0.5) + 'px "Shippori Mincho B1",serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ARENA === 'tokyo' ? '東' : '道', 0, R * 0.02);
+    ctx.textBaseline = 'alphabetic';
+    ctx.strokeStyle = A.glow; ctx.globalAlpha = 0.45 + 0.15 * Math.sin(S.t * 2); ctx.lineWidth = 3 * DPR;
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.16, 0, 6.283); ctx.stroke(); ctx.globalAlpha = 1;
+    // rim shadow
+    ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 8 * DPR; ctx.beginPath(); ctx.arc(0, 0, R - 3 * DPR, 0, 6.283); ctx.stroke();
     ctx.restore();
+    // vignette
+    var vg = ctx.createRadialGradient(CX, CY, R * 0.6, CX, CY, Math.max(W, H) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
   }
+
   function drawDojoBg(A) {
-    // back wall with shoji panels
-    ctx.fillStyle = A.wall; ctx.fillRect(0, 0, W, CY - R * 0.55);
-    ctx.strokeStyle = 'rgba(255,203,87,.16)'; ctx.lineWidth = 2 * DPR;
-    var y = CY - R * 0.62;
-    for (var x = 0; x < W; x += W / 10) { ctx.strokeRect(x + 4, y - 70 * DPR, W / 10 - 8, 70 * DPR); }
-    // paper lantern glow
-    var lg = ctx.createRadialGradient(W * 0.5, y - 20 * DPR, 0, W * 0.5, y - 20 * DPR, R * 0.9);
-    lg.addColorStop(0, 'rgba(255,203,87,.18)'); lg.addColorStop(1, 'rgba(255,203,87,0)'); ctx.fillStyle = lg; ctx.fillRect(0, 0, W, CY);
-  }
-  function drawTokyo(A) {
-    ctx.fillStyle = A.wall; ctx.fillRect(0, 0, W, CY - R * 0.5);
-    // blinking neon signs
-    var signs = 7;
-    for (var i = 0; i < signs; i++) {
-      var sx = (i + 0.5) / signs * W, sy = (i % 3) * 34 * DPR + 30 * DPR;
-      var on = (Math.floor(S.t * (1.3 + i * 0.4) + i) % 4) !== 0;
-      var hue = (i * 57) % 360, col = 'hsl(' + hue + ',90%,' + (on ? 62 : 32) + '%)';
-      ctx.globalAlpha = on ? 1 : 0.5; ctx.fillStyle = col;
-      ctx.fillRect(sx - 24 * DPR, sy, 48 * DPR, 16 * DPR);
-      if (on) { ctx.shadowColor = col; ctx.shadowBlur = 18 * DPR; ctx.fillRect(sx - 24 * DPR, sy, 48 * DPR, 16 * DPR); ctx.shadowBlur = 0; }
+    var wallH = CY - R * 0.5;
+    ctx.fillStyle = A.wall; ctx.fillRect(0, 0, W, wallH);
+    // glowing shoji grid
+    var gy = wallH - 96 * DPR;
+    var panelGlow = ctx.createLinearGradient(0, gy, 0, wallH); panelGlow.addColorStop(0, 'rgba(255,203,87,.10)'); panelGlow.addColorStop(1, 'rgba(255,203,87,.22)');
+    ctx.fillStyle = panelGlow; ctx.fillRect(0, gy, W, wallH - gy);
+    ctx.strokeStyle = 'rgba(20,14,10,.9)'; ctx.lineWidth = 3 * DPR;
+    for (var x = 0; x <= W; x += W / 12) { ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x, wallH); ctx.stroke(); }
+    for (var yy = gy; yy <= wallH; yy += 36 * DPR) { ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke(); }
+    // side pillars
+    ctx.fillStyle = '#17100b'; ctx.fillRect(0, 0, 26 * DPR, wallH + R * 0.2); ctx.fillRect(W - 26 * DPR, 0, 26 * DPR, wallH + R * 0.2);
+    // hanging paper lanterns, gently swaying
+    for (var l = 0; l < 3; l++) {
+      var lx = W * (0.26 + l * 0.24) + Math.sin(S.t * 1.1 + l) * 6 * DPR, ly = 30 * DPR + (l % 2) * 14 * DPR, lr = 17 * DPR;
+      ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1.5 * DPR; ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, ly - lr); ctx.stroke();
+      ctx.fillStyle = '#c62f28'; ctx.beginPath(); ctx.ellipse(lx, ly, lr * 0.8, lr, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = 'rgba(255,210,120,.9)'; ctx.fillRect(lx - lr * 0.8, ly - 2 * DPR, lr * 1.6, 4 * DPR);
+      ctx.shadowColor = '#ffb24a'; ctx.shadowBlur = 24 * DPR; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(lx, ly, lr * 0.5, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
     }
+  }
+
+  function drawTokyo(A) {
+    var wallH = CY - R * 0.4;
+    // layered building silhouettes
+    var layers = [['#141026', 0.55], ['#0e0b1c', 0.8]];
+    layers.forEach(function (L, li) {
+      ctx.fillStyle = L[0]; var base = wallH * L[1];
+      for (var bx = -20; bx < W + 40; bx += (70 + li * 40) * DPR) {
+        var bh = (60 + ((bx * 7 + li * 131) % 90)) * DPR; ctx.fillRect(bx, base - bh, (54 + li * 26) * DPR, bh + wallH);
+        // lit windows
+        if (li === 0) { ctx.fillStyle = 'rgba(255,220,140,.5)';
+          for (var wy = base - bh + 8 * DPR; wy < base - 8 * DPR; wy += 16 * DPR)
+            for (var wx = bx + 8 * DPR; wx < bx + 46 * DPR; wx += 14 * DPR) if ((wx * wy | 0) % 5 < 2) ctx.fillRect(wx, wy, 6 * DPR, 7 * DPR);
+          ctx.fillStyle = L[0]; }
+      }
+    });
+    // moon
+    ctx.fillStyle = 'rgba(240,240,255,.25)'; ctx.beginPath(); ctx.arc(W * 0.82, 50 * DPR, 30 * DPR, 0, 6.283); ctx.fill();
+    // big blinking neon signs
+    for (var i = 0; i < 6; i++) {
+      var sx = (i + 0.5) / 6 * W, sy = (18 + (i % 3) * 30) * DPR;
+      var on = (Math.floor(S.t * (1.1 + i * 0.5) + i) % 5) !== 0;
+      var hue = (i * 61) % 360, col = 'hsl(' + hue + ',95%,' + (on ? 62 : 26) + '%)';
+      ctx.globalAlpha = on ? 1 : 0.45; ctx.fillStyle = col;
+      if (on) { ctx.shadowColor = col; ctx.shadowBlur = 20 * DPR; }
+      ctx.fillRect(sx - 30 * DPR, sy, 60 * DPR, 20 * DPR);
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.font = '700 ' + (14 * DPR) + 'px "Shippori Mincho B1",serif'; ctx.textAlign = 'center';
+      ctx.fillText('東京'.charAt(i % 2), sx, sy + 15 * DPR);
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    }
+    // neon reflection streaks on the floor
+    ctx.globalAlpha = 0.14;
+    for (var r = 0; r < 6; r++) { ctx.fillStyle = 'hsl(' + (r * 61) + ',95%,60%)'; ctx.fillRect((r + 0.5) / 6 * W - 20 * DPR, CY, 40 * DPR, R * 0.9); }
     ctx.globalAlpha = 1;
   }
 
   function dirAngleScreen(dir) { var v = DIR[dir]; return Math.atan2(v[1] * DEPTH, v[0]); }
 
+  /* a small stylised fighter, feet at the current origin, drawn upward */
+  function drawFighter(hgt, body, o) {
+    o = o || {}; var bulk = o.bulk || 1, ph = o.phase || 0;
+    var dark = shade(body, -26), light = shade(body, 22);
+    var lift = Math.abs(Math.sin(ph)) * hgt * 0.04;
+    ctx.save(); ctx.translate(0, -lift);
+    if (o.lean) ctx.translate(0, 0);
+    // legs
+    var sw = Math.sin(ph) * hgt * 0.07, lw = 0.13 * hgt * bulk;
+    ctx.fillStyle = dark;
+    rrect(-0.14 * hgt * bulk - lw / 2, -0.30 * hgt + sw, lw, 0.32 * hgt - sw, lw * 0.5);
+    rrect(0.14 * hgt * bulk - lw / 2, -0.30 * hgt - sw, lw, 0.32 * hgt + sw, lw * 0.5);
+    // torso
+    ctx.save(); ctx.translate(0, -0.52 * hgt); if (o.lean) ctx.rotate(o.lean);
+    var tw = 0.30 * hgt * bulk, th = 0.5 * hgt;
+    var tg = ctx.createLinearGradient(-tw, 0, tw, 0); tg.addColorStop(0, dark); tg.addColorStop(0.5, body); tg.addColorStop(1, light);
+    ctx.fillStyle = tg; rrect(-tw, -th / 2, tw * 2, th, tw * 0.5);
+    if (o.belt) { ctx.fillStyle = o.belt; ctx.fillRect(-tw * 1.02, th * 0.12, tw * 2.04, th * 0.2); ctx.fillStyle = shade(o.belt, -30); ctx.fillRect(-tw * 0.2, th * 0.12, tw * 0.4, th * 0.2); }
+    if (o.sash) { ctx.strokeStyle = o.sash; ctx.lineWidth = hgt * 0.07; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-tw * 0.9, -th * 0.25); ctx.lineTo(tw * 0.7, th * 0.2); ctx.stroke(); }
+    ctx.restore();
+    // arms
+    ctx.fillStyle = body; var ay = -0.6 * hgt, ar = 0.1 * hgt * bulk;
+    rrect(-tw - ar * 0.6, ay, ar, 0.3 * hgt, ar * 0.5); rrect(tw - ar * 0.4, ay, ar, 0.3 * hgt, ar * 0.5);
+    // head
+    var hy = -0.86 * hgt, hr = 0.17 * hgt * (o.bigHead ? 1.15 : 1);
+    ctx.fillStyle = body; ctx.beginPath(); ctx.arc(0, hy, hr, 0, 6.283); ctx.fill();
+    ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(0, hy, hr, Math.PI * 0.15, Math.PI * 0.85); ctx.fill(); // chin shade
+    // eyes
+    ctx.fillStyle = o.eyes || '#eaffff'; ctx.save(); ctx.shadowColor = o.eyes || '#eaffff'; ctx.shadowBlur = o.eyeGlow ? 8 * DPR : 0;
+    ctx.fillRect(-hr * 0.6, hy - hr * 0.12, hr * 0.42, hr * 0.26); ctx.fillRect(hr * 0.18, hy - hr * 0.12, hr * 0.42, hr * 0.26); ctx.restore();
+    if (o.topknot) { ctx.fillStyle = '#1a140f'; ctx.beginPath(); ctx.arc(0, hy - hr * 0.95, hr * 0.5, 0, 6.283); ctx.fill(); }
+    if (o.band) { ctx.fillStyle = o.band; ctx.fillRect(-hr * 1.08, hy - hr * 0.42, hr * 2.16, hr * 0.34);
+      var tl = Math.sin(S.t * 7) * hr * 0.6; ctx.beginPath(); ctx.moveTo(hr, hy - hr * 0.3); ctx.lineTo(hr * 1.9, hy + tl); ctx.lineTo(hr * 1.7, hy + hr * 0.5 + tl); ctx.closePath(); ctx.fill(); }
+    // scarf trailing (ninja)
+    if (o.scarf) { ctx.fillStyle = o.scarf; var sx = Math.sin(S.t * 6) * hgt * 0.12;
+      ctx.beginPath(); ctx.moveTo(hgt * 0.06, -0.66 * hgt); ctx.quadraticCurveTo(hgt * 0.5 + sx, -0.56 * hgt, hgt * 0.42 + sx, -0.32 * hgt);
+      ctx.quadraticCurveTo(hgt * 0.32, -0.5 * hgt, hgt * 0.06, -0.6 * hgt); ctx.fill(); }
+    // shield (guard), held toward the camera
+    if (o.shield) { ctx.save(); ctx.translate(0, -0.42 * hgt); ctx.fillStyle = '#243f54';
+      ctx.strokeStyle = o.shieldGlow || '#8fd3ff'; ctx.lineWidth = hgt * 0.05;
+      ctx.beginPath(); ctx.ellipse(0, 0, 0.24 * hgt * bulk, 0.32 * hgt, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = o.shieldGlow || '#8fd3ff'; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(0, 0, 0.07 * hgt, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1; ctx.restore(); }
+    ctx.restore();
+  }
+  function rrect(x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); ctx.fill(); }
+
   function drawPlayer(A) {
     var hb = player.hurt > 0 && Math.floor(S.t * 20) % 2 === 0;
-    ctx.save(); ctx.translate(CX, CY);
     var fa = dirAngleScreen(player.face);
-    // strike slash arc, pointing exactly where you struck
+    ctx.save(); ctx.translate(CX, CY);
+    var lunge = player.strikeT > 0 ? player.strikeT / 0.18 : 0;
+    ctx.translate(DIR[player.face][0] * lunge * R * 0.05, DIR[player.face][1] * DEPTH * lunge * R * 0.05);
+    // strike slash arc, pointing where you struck
     if (player.slash > 0) {
       ctx.save(); ctx.rotate(fa);
-      ctx.globalAlpha = clamp(player.slash, 0, 1);
       var rr = player.reach * R;
-      ctx.strokeStyle = A.glow; ctx.lineWidth = 12 * DPR; ctx.lineCap = 'round'; ctx.globalAlpha = 0.35 * player.slash;
-      ctx.beginPath(); ctx.arc(0, 0, rr, -0.7, 0.7); ctx.stroke();
+      ctx.strokeStyle = A.glow; ctx.lineWidth = 13 * DPR; ctx.lineCap = 'round'; ctx.globalAlpha = 0.3 * player.slash;
+      ctx.beginPath(); ctx.arc(0, -R * 0.1, rr, -0.75, 0.75); ctx.stroke();
       ctx.globalAlpha = clamp(player.slash, 0, 1); ctx.strokeStyle = '#eaffff'; ctx.lineWidth = 5 * DPR;
-      ctx.beginPath(); ctx.arc(0, 0, rr, -0.55, 0.55); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -R * 0.1, rr, -0.55, 0.55); ctx.stroke();
       ctx.restore(); ctx.globalAlpha = 1;
     }
-    // ninja figure — darker body, red sash and a soft rim so "you" reads clearly
-    var bw = R * 0.058, bh = R * 0.14;
-    ctx.save(); ctx.shadowColor = A.glow; ctx.shadowBlur = 10 * DPR;
-    ctx.fillStyle = hb ? '#ff6a6a' : '#211a16';
-    ctx.beginPath(); ctx.ellipse(0, -bh, bw, bh, 0, 0, 6.283); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, -bh * 2.1, bw * 0.95, 0, 6.283); ctx.fill();
-    ctx.restore();
-    // red sash across the body
-    ctx.fillStyle = '#d7261e'; ctx.fillRect(-bw, -bh * 1.35, bw * 2, bw * 0.55);
-    // head wrap + a bright tick pointing the way you face
-    ctx.fillStyle = '#17120f'; ctx.beginPath(); ctx.arc(0, -bh * 2.1, bw * 0.98, Math.PI, 0); ctx.fill();
-    ctx.save(); ctx.rotate(fa + Math.PI / 2);
-    ctx.fillStyle = A.glow; ctx.fillRect(-bw * 0.65, -bh * 2.1 - bw * 2.4, bw * 1.3, bw * 0.55);
-    ctx.fillStyle = '#eaffff'; ctx.fillRect(-bw * 0.2, -bh * 2.1 - bw * 3.1, bw * 0.4, bw * 1.0);
-    ctx.restore();
+    drawFighter(R * 0.34, hb ? '#ff7a7a' : '#242b3d', { phase: S.t * 3, eyes: A.glow, eyeGlow: true,
+      band: '#d7261e', scarf: '#d7261e', sash: shade(A.floor, -10) });
     ctx.restore();
   }
 
   function drawEnemy(e, A) {
-    var p = enemyPos(e); var sc = p.s;
+    var p = enemyPos(e), sc = p.s;
     ctx.save(); ctx.translate(p.x, p.y);
-    if (e.state === 'dead') { ctx.globalAlpha = clamp(e.dead / 0.35, 0, 1); ctx.scale(1 + (1 - e.dead / 0.35) * 0.3, 1); }
-    var flash = e.hitFlash > 0, windup = e.state === 'windup' && Math.floor(S.t * 12) % 2 === 0;
-    var body = e.boss ? (windup ? '#ff4d4d' : '#6b2b2b') : e.type === 'guard' ? '#2d5d7a' : e.type === 'dasher' ? '#6a4b86' : '#3a2f28';
-    if (flash) body = '#fff';
-    var size = e.boss ? 0.18 : 0.085;
-    ctx.fillStyle = body;
-    ctx.beginPath(); ctx.ellipse(0, -size * R * sc, size * R * sc * 0.9, size * R * sc * 1.25, 0, 0, 6.283); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, -size * R * sc * 2.1, size * R * sc * 0.72, 0, 6.283); ctx.fill();
-    if (e.type === 'guard') { ctx.strokeStyle = '#8fd3ff'; ctx.lineWidth = 2.4 * DPR; ctx.globalAlpha = 0.9;
-      ctx.beginPath(); ctx.arc(0, -size * R * sc, size * R * sc * 1.5, 0, 6.283); ctx.stroke(); ctx.globalAlpha = 1; }
-    if (e.boss) { // hp pips
-      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(-size * R * sc, -size * R * sc * 3.4, size * R * sc * 2, 5 * DPR);
-      ctx.fillStyle = windup ? '#ffd36b' : '#ff6a6a'; ctx.fillRect(-size * R * sc, -size * R * sc * 3.4, size * R * sc * 2 * (e.hp / e.maxhp), 5 * DPR); }
+    if (e.state === 'dead') { ctx.globalAlpha = clamp(e.dead / 0.35, 0, 1); ctx.scale(1 + (1 - e.dead / 0.35) * 0.4, 1 - (1 - e.dead / 0.35) * 0.3); }
+    var flash = e.hitFlash > 0, windup = e.state === 'windup';
+    var ph = e.t * 9 + e.wob;
+    if (e.type === 'dasher') { // motion afterimages
+      ctx.globalAlpha = 0.22; for (var g = 1; g <= 2; g++) { ctx.save(); ctx.translate(DIR[e.dir][0] * g * 7 * DPR, DIR[e.dir][1] * g * 4 * DPR);
+        drawFighter(R * 0.24 * sc, '#5b3f86', { phase: ph, bulk: 0.8 }); ctx.restore(); } ctx.globalAlpha = 1; }
+    if (e.boss && windup) { ctx.save(); ctx.globalAlpha = 0.4 + 0.3 * Math.sin(S.t * 16); // red charge aura
+      ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(0, -R * 0.2 * sc, R * 0.34 * sc, 0, 6.283); ctx.fill(); ctx.restore(); ctx.globalAlpha = 1; }
+
+    var col, opts = { phase: ph };
+    if (e.boss) { col = '#d8b89a'; opts = { phase: ph * 0.6, bulk: 1.9, bigHead: 1, belt: '#8a1f1f', topknot: 1, eyes: '#2a1c16', lean: windup ? -0.22 : 0 }; }
+    else if (e.type === 'guard') { col = '#2d5d7a'; opts = { phase: ph, bulk: 1.15, shield: 1, shieldGlow: e.hp < e.maxhp ? '#ffd36b' : '#8fd3ff', eyes: '#cde9ff' }; }
+    else if (e.type === 'dasher') { col = '#6a4b86'; opts = { phase: ph, bulk: 0.8, eyes: '#e3c6ff', eyeGlow: true, lean: -0.15 }; }
+    else { col = '#4a3b30'; opts = { phase: ph, bulk: 1.1, eyes: '#ff6a6a', eyeGlow: true }; }
+    if (flash) col = '#ffffff';
+    var hgt = (e.boss ? 0.6 : e.type === 'guard' ? 0.28 : 0.26) * R * sc;
+    drawFighter(hgt, col, opts);
+
+    if (e.boss) { // hp bar
+      var bw = 0.4 * R * sc; ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(-bw, -0.72 * R * sc, bw * 2, 6 * DPR);
+      ctx.fillStyle = windup ? '#ffd36b' : '#ff5a5a'; ctx.fillRect(-bw, -0.72 * R * sc, bw * 2 * (e.hp / e.maxhp), 6 * DPR); }
     ctx.restore();
   }
 
