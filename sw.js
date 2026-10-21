@@ -1,6 +1,6 @@
 /* Ninja Dojo service worker: cache the shell for offline play; never cache the API. */
 const VERSION = 'nd-v2-' + (new URL(self.location.href).searchParams.get('v') || '1');
-const CORE = ['/', '/index.html', '/game.js', '/manifest.json',
+const CORE = ['/', '/index.html', '/game.js', '/scene3d.js', '/vendor/three.min.js', '/manifest.json',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-icon.png'];
 const FONT_CACHE = 'nd-fonts';
 

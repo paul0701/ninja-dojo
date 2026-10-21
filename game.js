@@ -65,6 +65,7 @@
     cv.width = W; cv.height = H;
     R = Math.min(W, H * 1.25) * 0.42;
     CX = W * 0.5; CY = H * 0.5 + R * 0.08;
+    if (window.Scene3D && Scene3D.ok) Scene3D.resize(innerWidth, innerHeight, DPR);
   }
 
   /* ---------- waves / difficulty ---------- */
@@ -153,6 +154,7 @@
     player.face = dir; S.lastDir = dir;
     player.cd = player.cdBase; player.strikeT = 0.18; player.slash = 1;
     sfx('slash');
+    if (window.Scene3D && Scene3D.ok) Scene3D.slash(dir, player.reach, ARENAS[ARENA].glow);
     var sv = DIR[dir], hit = 0, i, e;
     for (i = 0; i < S.enemies.length; i++) {
       e = S.enemies[i];
@@ -172,8 +174,8 @@
 
   function damage(e, amount, counter) {
     e.hp -= amount; e.hitFlash = 0.18; S.shake = Math.max(S.shake, e.boss ? 0.5 : 0.22);
-    var p = enemyPos(e);
-    burst(p.x, p.y - R * 0.12 * p.s, e.boss ? ARENAS[ARENA].glow : '#ffe6c0', e.boss ? 14 : 8, 170);
+    var p = scr(e.dir, e.d);
+    burst(p.x, p.y - 20 * DPR, e.boss ? ARENAS[ARENA].glow : '#ffe6c0', e.boss ? 14 : 8, 170);
     if (counter) { toast('COUNTER!', '#ff5f6d', ''); if (player.powers.focus) S.slowT = 0.9; S.flash = 0.5; S.flashColor = '#ffd36b'; }
     if (e.hp <= 0) kill(e);
   }
@@ -183,9 +185,9 @@
     var base = e.boss ? 1500 : e.type === 'guard' ? 150 : e.type === 'dasher' ? 120 : 80;
     var gain = Math.round(base * Math.max(1, S.combo));
     S.score += gain;
-    var p = enemyPos(e);
-    burst(p.x, p.y - R * 0.1 * p.s, e.boss ? ARENAS[ARENA].glow : '#fff', e.boss ? 40 : 14, e.boss ? 320 : 220);
-    float('+' + gain, p.x, p.y - R * 0.22 * p.s, e.boss ? ARENAS[ARENA].glow : '#ffe6c0');
+    var p = scr(e.dir, e.d);
+    burst(p.x, p.y - 16 * DPR, e.boss ? ARENAS[ARENA].glow : '#fff', e.boss ? 40 : 14, e.boss ? 320 : 220);
+    float('+' + gain, p.x, p.y - 40 * DPR, e.boss ? ARENAS[ARENA].glow : '#ffe6c0');
     if (e.boss) { S.flash = 0.6; S.flashColor = ARENAS[ARENA].glow; sfx('boss'); } else sfx('hit');
   }
 
@@ -262,7 +264,7 @@
       } else {
         e.d -= e.speed * sdt;
         if (e.d <= 0.14 && e.state !== 'strike') { e.state = 'strike'; e.windup = 0.28; }
-        if (e.state === 'strike') { e.windup -= sdt; if (e.windup <= 0) { hurtPlayer(1); e.state = 'dead'; e.dead = 0.2; var pp = enemyPos(e); burst(pp.x, pp.y, '#d7261e', 8, 140); } }
+        if (e.state === 'strike') { e.windup -= sdt; if (e.windup <= 0) { hurtPlayer(1); e.state = 'dead'; e.dead = 0.2; var pp = scr(e.dir, e.d); burst(pp.x, pp.y, '#d7261e', 8, 140); } }
       }
     }
     S.enemies = S.enemies.filter(function (e) { return !(e.state === 'dead' && e.dead <= 0); });
@@ -283,26 +285,15 @@
   /* ---------- render ---------- */
   function draw() {
     var A = ARENAS[ARENA];
-    ctx.save();
-    if (S.shake > 0) ctx.translate(rnd(-1, 1) * S.shake * 10, rnd(-1, 1) * S.shake * 10);
-    drawArena(A);
+    // the 3D world (arena + characters + slashes) is drawn by Scene3D on the WebGL canvas
+    if (window.Scene3D && Scene3D.ok) Scene3D.frame(S, player);
+    // the 2D overlay (HUD, particles, floating text, flash) draws on top
+    ctx.clearRect(0, 0, W, H);
 
-    // build a draw list (floor shadow + sprite) sorted by depth (wz)
-    var list = [];
-    S.enemies.forEach(function (e) { var wz = DIR[e.dir][1] * e.d; list.push({ wz: wz, e: e }); });
-    list.push({ wz: 0, player: true });
-    list.sort(function (a, b) { return a.wz - b.wz; });
-
-    // ground shadows first (so sprites overlap cleanly)
-    S.enemies.forEach(function (e) { var p = enemyPos(e); shadow(p.x, p.y, (e.boss ? 0.16 : 0.09) * R * p.s); });
-    shadow(CX, CY, 0.11 * R);
-
-    list.forEach(function (it) { if (it.player) drawPlayer(A); else drawEnemy(it.e, A); });
-
-    // shuriken
-    S.shuriken.forEach(function (st) { var p = project(DIR[st.dir][0] * st.d, DIR[st.dir][1] * st.d, 0.3);
+    // shuriken markers
+    S.shuriken.forEach(function (st) { var p = scr(st.dir, st.d);
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(st.spin); ctx.fillStyle = '#e9f6ff';
-      for (var a = 0; a < 4; a++) { ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(5 * p.s, -2); ctx.lineTo(13 * p.s, 0); ctx.lineTo(5 * p.s, 2); ctx.fill(); }
+      for (var a = 0; a < 4; a++) { ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(5 * DPR, -2 * DPR); ctx.lineTo(13 * DPR, 0); ctx.lineTo(5 * DPR, 2 * DPR); ctx.fill(); }
       ctx.restore(); });
 
     // particles
@@ -324,13 +315,12 @@
       }
     });
     ctx.globalAlpha = 1;
-    ctx.restore();
 
     if (S.flash > 0) { ctx.globalAlpha = S.flash * 0.5; ctx.fillStyle = S.flashColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
   }
 
-  function shadow(x, y, r) { ctx.save(); ctx.translate(x, y); ctx.scale(1, DEPTH); ctx.fillStyle = 'rgba(0,0,0,.33)';
-    ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.fill(); ctx.restore(); }
+  /* project a (dir, distance) ring position to overlay pixels via the 3D camera */
+  function scr(dir, d) { return (window.Scene3D && Scene3D.ok) ? Scene3D.worldPx(dir, d) : { x: CX, y: CY }; }
 
   function drawArena(A) {
     var g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, A.sky); g.addColorStop(1, '#060403');
@@ -553,6 +543,7 @@
   function startGame() {
     var best = S.best, muted = S.muted;
     reset(); S.best = best; S.muted = muted;
+    if (window.Scene3D && Scene3D.ok) { Scene3D.reset(); Scene3D.setArena(ARENA, ARENAS[ARENA]); }
     startWave(1);
   }
   function gameOver() {
@@ -653,7 +644,7 @@
       el.appendChild(c);
       var b = document.createElement('b'); b.innerHTML = A.name + '<small>' + (key === 'tokyo' ? 'Neon, blinking signs' : 'Lanterns and shoji') + '</small>';
       el.appendChild(b);
-      el.addEventListener('click', function () { ARENA = key; [].forEach.call(wrap.children, function (ch) { ch.setAttribute('aria-pressed', 'false'); }); el.setAttribute('aria-pressed', 'true'); });
+      el.addEventListener('click', function () { ARENA = key; [].forEach.call(wrap.children, function (ch) { ch.setAttribute('aria-pressed', 'false'); }); el.setAttribute('aria-pressed', 'true'); if (window.Scene3D && Scene3D.ok) Scene3D.setArena(key, ARENAS[key]); });
       wrap.appendChild(el);
     });
   }
@@ -678,7 +669,11 @@
   }
 
   /* ---------- boot ---------- */
-  reset(); resize(); wire(); buildPicker();
+  reset();
+  window.NDARENAS = ARENAS;
+  if (window.Scene3D) Scene3D.init(document.getElementById('three'));
+  resize(); wire(); buildPicker();
+  if (window.Scene3D && Scene3D.ok) Scene3D.setArena(ARENA, ARENAS[ARENA]);
   $('titleBest').textContent = S.best.toLocaleString();
   setMuted(S.muted); setOverlay('ovTitle');
   // dismiss the native splash from the old build if present

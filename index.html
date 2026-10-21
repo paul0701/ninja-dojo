@@ -21,7 +21,8 @@
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; height:100%; background:#0b0807; overflow:hidden; color:var(--ink);
     font-family:"Zen Kaku Gothic New",system-ui,sans-serif; }
-  #cv { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  #three { position:fixed; inset:0; width:100%; height:100%; display:block; z-index:0; }
+  #cv { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; z-index:1; }
   .serif { font-family:"Shippori Mincho B1",serif; }
 
   /* overlays */
@@ -89,6 +90,7 @@
 </style>
 </head>
 <body>
+<canvas id="three"></canvas>
 <canvas id="cv"></canvas>
 
 <div class="corner">
@@ -161,6 +163,8 @@
   </div>
 </div>
 
+<script src="/vendor/three.min.js" defer></script>
+<script src="/scene3d.js" defer></script>
 <script src="/game.js" defer></script>
 </body>
 </html>
