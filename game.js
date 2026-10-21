@@ -99,26 +99,37 @@
 
   /* ---------- power-ups ---------- */
   var POWERS = {
-    nunchucks: { ico: '🥢', name: 'Nunchucks', desc: 'Longer reach — strike enemies further out.',
-      apply: function () { player.reach += 0.09; } },
+    nunchucks: { ico: '🥢', name: 'Nunchucks', desc: 'Longer reach — strike enemies further out.', group: 'range',
+      apply: function () { player.reach += 0.09; player.powers.nunchucks = (player.powers.nunchucks || 0) + 1; } },
     heart:     { ico: '❤️', name: 'Spirit', desc: 'Restore a heart (up to five).',
       apply: function () { S.lives = Math.min(S.maxLives, S.lives + 1); } },
     swift:     { ico: '⚡', name: 'Swift strikes', desc: 'Strike faster — shorter recovery.',
       apply: function () { player.cdBase = Math.max(0.12, player.cdBase - 0.045); } },
-    shuriken:  { ico: '✴️', name: 'Shuriken', desc: 'Throw a star at the nearest foe every few seconds.',
+    shuriken:  { ico: '✴️', name: 'Shuriken', desc: 'Throw a star at the nearest foe every few seconds.', group: 'range',
       apply: function () { player.powers.shuriken = (player.powers.shuriken || 0) + 1; } },
     whirlwind: { ico: '🌀', name: 'Whirlwind', desc: 'Fills a meter as you strike; unleash a spin that clears everyone near.',
       apply: function () { player.powers.whirlwind = true; } },
     focus:     { ico: '🧘', name: 'Focus', desc: 'A clean counter briefly slows time.',
       apply: function () { player.powers.focus = true; } }
   };
+  function ownedGroup(g) {   // which range weapon (if any) the player has committed to
+    return Object.keys(POWERS).some(function (k) { return POWERS[k].group === g && player.powers[k]; });
+  }
   function offerPowers() {
     S.scene = 'levelup';
     var keys = Object.keys(POWERS).slice();
-    // always allow a heart if hurt; pick three
+    // drop a range weapon once you've committed to the other (no shuriken + nunchucks)
+    if (ownedGroup('range')) keys = keys.filter(function (k) { return !(POWERS[k].group === 'range' && !player.powers[k]); });
     for (var i = keys.length - 1; i > 0; i--) { var j = ri(i + 1), t = keys[i]; keys[i] = keys[j]; keys[j] = t; }
-    var pick = keys.slice(0, 3);
-    if (S.lives < S.maxLives && pick.indexOf('heart') < 0) pick[2] = 'heart';
+    // pick three, but never two of the same group in one offer
+    var pick = [], groups = {};
+    for (i = 0; i < keys.length && pick.length < 3; i++) {
+      var g = POWERS[keys[i]].group;
+      if (g && groups[g]) continue;
+      if (g) groups[g] = 1;
+      pick.push(keys[i]);
+    }
+    if (S.lives < S.maxLives && pick.indexOf('heart') < 0) pick[pick.length - 1] = 'heart';
     var wrap = $('levelCards'); wrap.innerHTML = '';
     $('levelWave').textContent = S.wave;
     pick.forEach(function (k) {
@@ -363,9 +374,9 @@
     var hb = player.hurt > 0 && Math.floor(S.t * 20) % 2 === 0;
     ctx.save(); ctx.translate(CX, CY);
     var fa = dirAngleScreen(player.face);
-    // strike slash arc behind/around, in the facing direction
+    // strike slash arc, pointing exactly where you struck
     if (player.slash > 0) {
-      ctx.save(); ctx.rotate(fa + Math.PI / 2);
+      ctx.save(); ctx.rotate(fa);
       ctx.globalAlpha = clamp(player.slash, 0, 1);
       var rr = player.reach * R;
       ctx.strokeStyle = A.glow; ctx.lineWidth = 12 * DPR; ctx.lineCap = 'round'; ctx.globalAlpha = 0.35 * player.slash;
