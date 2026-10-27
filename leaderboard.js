@@ -8,6 +8,8 @@
   function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   function best() { return Math.max(0, parseInt(ls(KEY) || '0', 10) || 0); }
   function esc(s) { return String(s).replace(/[<>&"]/g, function (c) { return ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]; }); }
+  // match the server's whitespace handling so the "me" row highlight lines up
+  function norm(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
 
   var css = '' +
     '#ndlb-btn{position:fixed;left:14px;bottom:14px;z-index:9998;width:46px;height:46px;border-radius:12px;border:1px solid rgba(255,203,87,.4);' +
@@ -80,14 +82,16 @@
     fetch(API + '?top=10').then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (d) {
       var rows = (d && d.scores) || [];
       if (!rows.length) { listEl.innerHTML = '<li class="muted">No scores yet — be the first.</li>'; return; }
+      var mineLc = mine ? norm(mine).toLowerCase() : '';
       listEl.innerHTML = rows.map(function (s) {
-        return '<li' + (mine && s.name === mine ? ' class="me"' : '') + '><span>' + esc(s.name) + '</span><b>' + Number(s.score).toLocaleString() + '</b></li>';
+        var me = mineLc && norm(s.name).toLowerCase() === mineLc;
+        return '<li' + (me ? ' class="me"' : '') + '><span>' + esc(s.name) + '</span><b>' + Number(s.score).toLocaleString() + '</b></li>';
       }).join('');
     }).catch(function () { listEl.innerHTML = '<li class="muted">Leaderboard offline — try again shortly.</li>'; });
   }
 
   function submit() {
-    var name = (nameInput.value || '').trim(), b = best();
+    var name = norm(nameInput.value), b = best();
     if (name.length < 2) { noteEl.textContent = 'Enter a name (2–16 characters).'; return; }
     if (b <= 0) { noteEl.textContent = 'No score to submit yet.'; return; }
     ls(NAMEK, name); noteEl.textContent = 'Submitting…';
@@ -95,13 +99,16 @@
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (!res.ok) { noteEl.textContent = (res.j && res.j.message) || 'Could not submit.'; return; }
-        ls(SENTK, String(b)); noteEl.textContent = 'Posted — nice work.'; refreshSubState(); load();
+        // refresh state/list first, then show the confirmation so it isn't overwritten
+        ls(SENTK, String(b)); refreshSubState(); load(); noteEl.textContent = 'Posted — nice work.';
       }).catch(function () { noteEl.textContent = 'Leaderboard offline just now. Try again later.'; });
   }
 
-  // watch for a new best while playing, and nudge the button
+  // watch for a new best while playing, and nudge the button — but only while the
+  // tab is visible, so a backgrounded PWA isn't polling localStorage forever
   var lastBest = best();
   setInterval(function () {
+    if (document.hidden) return;
     var b = best();
     if (b > lastBest) { lastBest = b; var sent = parseInt(ls(SENTK) || '0', 10) || 0;
       if (b > sent && !ov.classList.contains('on')) btn.classList.add('pulse'); }

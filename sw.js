@@ -1,9 +1,14 @@
 const VERSION = 'nd-' + (new URL(self.location.href).searchParams.get('v') || 'dev');
-const CORE = ['/', '/index.html', '/leaderboard.js', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-icon.png'];
+const CORE = ['/', '/index.html', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-icon.png'];
+// Cached best-effort: if it's briefly unavailable it must not fail the whole precache.
+const EXTRA = ['/leaderboard.js'];
 const FONT_CACHE = 'nd-fonts';
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(CORE)).catch(() => {}));
+  e.waitUntil(caches.open(VERSION).then(async (c) => {
+    await c.addAll(CORE).catch(() => {});
+    await Promise.all(EXTRA.map((u) => c.add(u).catch(() => {})));
+  }).catch(() => {}));
 });
 
 self.addEventListener('activate', (e) => {
