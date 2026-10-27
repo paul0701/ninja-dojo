@@ -67,6 +67,25 @@
     if (c.scarf) { var scMat = mat(c.scarf); mats.push(scMat); var scarf = box(0.08 * H0, 0.05 * H0, 0.3 * H0, scMat);
       scarf.position.set(0.05 * H0, 0.74 * H0, -0.18 * H0); g.add(scarf); g._scarf = scarf; }
 
+    // weapon held in the right hand (player only): katana by default, nunchucks swapped in
+    if (c.weapon) {
+      var hand = new T.Group(); hand.position.y = -armLen; armR_.add(hand);
+      // katana
+      var kat = new T.Group();
+      var steel = new T.MeshStandardMaterial({ color: 0xe8eef6, metalness: 0.85, roughness: 0.28, emissive: new T.Color(0x24406a), emissiveIntensity: 0.5 });
+      var blade = box(0.028 * H0, 0.62 * H0, 0.018 * H0, steel); blade.position.y = -0.36 * H0; kat.add(blade);
+      var guard = box(0.12 * H0, 0.03 * H0, 0.03 * H0, mat(0x2a2016)); guard.position.y = -0.045 * H0; kat.add(guard);
+      var hilt = cyl(0.028 * H0, 0.028 * H0, 0.14 * H0, mat(0x6a1f1f)); hilt.position.y = 0.04 * H0; kat.add(hilt);
+      kat.rotation.x = -0.5; hand.add(kat);
+      // nunchucks (two sticks + chain), hidden until equipped
+      var nun = new T.Group(); var wood = mat(0x3a2a18);
+      var s1 = cyl(0.03 * H0, 0.03 * H0, 0.22 * H0, wood); s1.position.y = -0.11 * H0; nun.add(s1);
+      var pivot2 = new T.Group(); pivot2.position.y = -0.24 * H0;
+      var s2 = cyl(0.03 * H0, 0.03 * H0, 0.22 * H0, wood); s2.position.y = -0.11 * H0; pivot2.add(s2); nun.add(pivot2);
+      var chain = cyl(0.008 * H0, 0.008 * H0, 0.05 * H0, mat(0x9a9a9a)); chain.position.y = -0.235 * H0; nun.add(chain);
+      nun.visible = false; hand.add(nun);
+      g._katana = kat; g._nunchucks = nun; g._nunPivot = pivot2;
+    }
     g.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
     g.userData = { legL: legL, legR: legR_, armL: armL, armR: armR_, head: head, torso: torso,
       mats: mats, bodyMats: [bodyMat, dark, headMat], eyeMat: eyeMat, base: c.body };
@@ -159,7 +178,7 @@
         keyLight = new T.DirectionalLight(0xffffff, 1.0); keyLight.position.set(5, 11, 6); keyLight.castShadow = true;
         keyLight.shadow.mapSize.set(1024, 1024); var sc = keyLight.shadow.camera; sc.left = -8; sc.right = 8; sc.top = 8; sc.bottom = -8; sc.near = 1; sc.far = 30;
         scene.add(keyLight);
-        playerG = makeFighter({ height: 1.25, body: 0x242b3d, eyes: 0x8fe9ff, eyeGlow: 1, band: 0xd7261e, scarf: 0xd7261e, sash: 0x3a2f28 });
+        playerG = makeFighter({ height: 1.25, body: 0x242b3d, eyes: 0x8fe9ff, eyeGlow: 1, band: 0xd7261e, scarf: 0xd7261e, sash: 0x3a2f28, weapon: true });
         scene.add(playerG);
         A = window.NDARENAS ? window.NDARENAS.dojo : { sky: 0x140d09, floor: 0xb07a43, floor2: 0x7c5330, glow: 0xffcb57 };
         buildArena();
@@ -200,6 +219,11 @@
       var bob = Math.sin(t * 3) * 0.03; playerG.position.y = bob;
       swingWalk(playerG, t * 3, 0.15);
       if (player.strikeT > 0) { playerG.userData.armR.rotation.x = -1.6 * lunge; }
+      // weapon: show katana, or nunchucks once that power-up is taken
+      var nun = player.powers && player.powers.nunchucks;
+      if (playerG._katana) playerG._katana.visible = !nun;
+      if (playerG._nunchucks) playerG._nunchucks.visible = !!nun;
+      if (nun && playerG._nunPivot) playerG._nunPivot.rotation.x = Math.sin(t * 16) * (player.strikeT > 0 ? 1.4 : 0.5);
       flashBody(playerG, player.hurt > 0 ? 0.6 : 0, 0xff4444);
       if (playerG._scarf) playerG._scarf.rotation.y = Math.sin(t * 6) * 0.5;
       // enemies: reconcile
