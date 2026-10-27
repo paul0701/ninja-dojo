@@ -1,0 +1,8 @@
+# The game itself is the uploaded static build; this adds the leaderboard function.
+[build]
+  publish = "."
+  command = ""
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
