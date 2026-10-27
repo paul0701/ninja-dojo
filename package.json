@@ -1,0 +1,10 @@
+{
+  "name": "ninja-dojo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ninja Dojo — static build plus a Netlify Blobs leaderboard.",
+  "dependencies": {
+    "@netlify/blobs": "^11.1.6"
+  }
+}
