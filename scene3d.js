@@ -68,15 +68,17 @@
       scarf.position.set(0.05 * H0, 0.74 * H0, -0.18 * H0); g.add(scarf); g._scarf = scarf; }
 
     g.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
-    g.userData = { legL: legL, legR: legR_, armL: armL, armR: armR_, head: head, torso: torso, mats: mats, eyeMat: eyeMat, base: c.body };
+    g.userData = { legL: legL, legR: legR_, armL: armL, armR: armR_, head: head, torso: torso,
+      mats: mats, bodyMats: [bodyMat, dark, headMat], eyeMat: eyeMat, base: c.body };
     return g;
   }
 
   function makeEnemy(e) {
-    if (e.boss) return makeFighter({ height: 1.9, body: 0xd8b89a, bulk: 1.9, bigHead: 1, belt: 0x8a1f1f, topknot: 1, eyes: 0x2a1c16 });
-    if (e.type === 'guard') return makeFighter({ height: 1.15, body: 0x2d5d7a, bulk: 1.2, shield: 1, shieldGlow: 0x8fd3ff, eyes: 0xcde9ff });
-    if (e.type === 'dasher') return makeFighter({ height: 1.05, body: 0x6a4b86, bulk: 0.82, eyes: 0xe3c6ff, eyeGlow: 1 });
-    return makeFighter({ height: 1.05, body: 0x4a3b30, bulk: 1.1, eyes: 0xff5a5a, eyeGlow: 1 });
+    // bold, distinct colours and silhouettes per type
+    if (e.boss) return makeFighter({ height: 2.0, body: 0xf0c49a, bulk: 2.05, bigHead: 1, belt: 0xe11d48, topknot: 1, eyes: 0x1a1010 });      // huge pale sumo, crimson mawashi
+    if (e.type === 'guard') return makeFighter({ height: 1.22, body: 0x2f6bd6, bulk: 1.35, shield: 1, shieldGlow: 0x8fd3ff, eyes: 0xdff1ff }); // broad royal-blue guard
+    if (e.type === 'dasher') return makeFighter({ height: 1.22, body: 0x16d6c6, bulk: 0.72, eyes: 0xffffff, eyeGlow: 1, band: 0x0bb3a6 });      // tall, lean, electric-cyan
+    return makeFighter({ height: 1.04, body: 0xe85526, bulk: 1.3, eyes: 0xffe14d, eyeGlow: 1 });                                               // squat orange brawler, yellow eyes
   }
 
   /* ---- arenas ---- */
@@ -235,9 +237,15 @@
   function swingWalk(g, phase, amt) { var u = g.userData; if (!u || !u.legL) return;
     var s = Math.sin(phase) * amt; u.legL.rotation.x = s; u.legR.rotation.x = -s;
     if (u.armL) { u.armL.rotation.x = -s * 0.6; u.armR.rotation.x = s * 0.6; } }
-  function flashBody(g, amt, color) { var mats = g.userData && g.userData.mats; if (!mats) return;
-    var c = new T.Color(color); mats.forEach(function (m) { if (m.emissive) { m.emissive.copy(c); m.emissiveIntensity = amt; } });
-    if (g.userData.eyeMat) g.userData.eyeMat.emissiveIntensity = 0.6 + amt; }
+  function flashBody(g, amt, color) {
+    var u = g.userData; if (!u || !u.mats) return;
+    if (amt > 0) { var c = new T.Color(color); u.mats.forEach(function (m) { if (m.emissive) { m.emissive.copy(c); m.emissiveIntensity = amt; } }); }
+    else {
+      u.mats.forEach(function (m) { if (m.emissive) m.emissiveIntensity = 0; });
+      var b = new T.Color(u.base); (u.bodyMats || []).forEach(function (m) { m.emissive.copy(b); m.emissiveIntensity = 0.2; });  // a gentle self-glow keeps body colours vivid in shadow
+    }
+    if (u.eyeMat) u.eyeMat.emissiveIntensity = 0.7 + Math.max(0, amt);
+  }
 
   function shadeHex(hex, amt) { var c = new T.Color(hex); c.r = clamp01(c.r + amt); c.g = clamp01(c.g + amt); c.b = clamp01(c.b + amt); return c.getHex(); }
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
