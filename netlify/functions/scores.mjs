@@ -8,7 +8,15 @@
 // per name and per IP, and keeps the top 200 in one blob. Writes to that blob use
 // optimistic concurrency (compare-and-swap on the etag) so simultaneous
 // submissions can't clobber each other.
-import { getStore } from '@netlify/blobs';
+import { getStore, getDeployStore } from '@netlify/blobs';
+
+// Netlify Blobs site-wide stores (getStore) are shared across ALL deploy
+// contexts, so a deploy-preview would read and overwrite the production board.
+// Keep production on the persistent site-wide store (scores must survive
+// deploys), and route every other context (deploy-preview, branch-deploy, dev)
+// to an isolated, auto-cleaned deploy store so previews can't touch real data.
+const IS_PROD = (process.env.CONTEXT || 'production') === 'production';
+const openStore = (name) => (IS_PROD ? getStore(name) : getDeployStore(name));
 
 const NAME_RE = /^[\p{L}\p{N} _.\-]{2,16}$/u;
 const MAX_KEEP = 200;
@@ -53,7 +61,7 @@ const clientIp = (req) =>
   'unknown';
 
 export default async (req) => {
-  const store = getStore('ninja-dojo-scores');
+  const store = openStore('ninja-dojo-scores');
 
   if (req.method === 'GET') {
     const top = Math.min(100, Math.max(1, parseInt(new URL(req.url).searchParams.get('top') || '10', 10) || 10));
@@ -72,7 +80,7 @@ export default async (req) => {
   const now = Date.now();
 
   // Per-IP speed bump. Best-effort and keyed per IP, so it needs no CAS.
-  const ipStore = getStore('ninja-dojo-rl');
+  const ipStore = openStore('ninja-dojo-rl');
   const ip = clientIp(req);
   try {
     const last = Number(await ipStore.get('ip:' + ip)) || 0;
