@@ -1,7 +1,7 @@
-const VERSION = 'nd-' + (new URL(self.location.href).searchParams.get('v') || 'dev');
+const VERSION = 'nd2-' + (new URL(self.location.href).searchParams.get('v') || 'dev');
 const CORE = ['/', '/index.html', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-icon.png'];
 // Cached best-effort: if it's briefly unavailable it must not fail the whole precache.
-const EXTRA = ['/leaderboard.js'];
+const EXTRA = ['/account.js'];
 const FONT_CACHE = 'nd-fonts';
 
 self.addEventListener('install', (e) => {
