@@ -9,8 +9,14 @@
    logged in across visits, and because accounts live on the server you are the
    same player on every device.
 
+   Scores follow you between devices: on sign-in the server's best is copied into the game's
+   own saved best (the highest wins), and the game reloads once so it shows it. When the
+   service starts a new season (a score wipe), each device clears its own saved best the next
+   time the game loads, and scores from a device that has not cleared yet are refused.
+   Pass bestKey (the localStorage key where the game keeps its numeric best) to turn this on.
+
    Usage (after the game knows its best score):
-     Account.init({ game: 'devil-run', title: 'Devil Run' });
+     Account.init({ game: 'devil-run', title: 'Devil Run', bestKey: 'devilRun.best' });
      Account.reportBest(score);   // call on game over / whenever a best changes
 
    Theme via CSS custom properties on :root (all optional):
@@ -22,13 +28,56 @@
 */
 (function () {
   'use strict';
-  var API = '', GAME = 'game', TITLE = 'Leaderboard';
-  var TOKENK = 'as.acct.token', NAMEK = 'as.acct.name';
+  var API = '', GAME = 'game', TITLE = 'Leaderboard', BESTKEY = null;
+  var TOKENK = 'as.acct.token', NAMEK = 'as.acct.name', SEASONK = 'as.season';
+  var seasonVal = 1, gate = null;
   var token = null, me = null, period = 'all', pendingBest = 0;
 
   function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
   function esc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, function (c) { return ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]; }); }
   function n(x) { return Number(x || 0).toLocaleString(); }
+
+  // ---- seasons + device sync ----
+  // Reload the page once (per tag, per 30 seconds) so the game re-reads what we just wrote.
+  function reloadSoon(tag, delay) {
+    try {
+      var k = 'as.reloaded.' + tag, last = Number(sessionStorage.getItem(k)) || 0;
+      if (Date.now() - last < 30000) return;
+      sessionStorage.setItem(k, String(Date.now()));
+    } catch (e) {}
+    setTimeout(function () { location.reload(); }, delay || 0);
+  }
+  // Clear this device's saved score. Returns true if there was anything to clear.
+  function wipeLocal() {
+    if (!BESTKEY) return false;
+    var had = ls(BESTKEY) !== null && ls(BESTKEY) !== '';
+    ls(BESTKEY, null);
+    return had;
+  }
+  // Ask which season scores are in. Resolves true to carry on, false when this device was just
+  // reset (the page reloads). Offline, it carries on with the season it last knew.
+  function checkSeason() {
+    return api('/api/season').then(function (s) {
+      var cur = Number(s && s.season) || 1;
+      var had = Number(ls(SEASONK)) || 1;            // scores from before seasons existed are season 1
+      seasonVal = cur;
+      ls(SEASONK, String(cur));
+      if (had !== cur) { if (wipeLocal()) { reloadSoon('season', 0); return false; } }
+      return true;
+    }).catch(function () { seasonVal = Number(ls(SEASONK)) || 1; return true; });
+  }
+  // Copy the server's best into the game's own saved best when it is higher. True if the page will reload.
+  function pullBest(serverBest) {
+    if (!BESTKEY) return false;
+    var sb = Math.floor(Number(serverBest) || 0);
+    if (sb <= 0) return false;
+    var lb = parseInt(ls(BESTKEY) || '0', 10) || 0;
+    if (sb <= lb) return false;
+    ls(BESTKEY, String(sb));
+    if ((parseInt(ls(BESTKEY) || '0', 10) || 0) !== sb) return false;   // storage not writable: do not loop
+    reloadSoon('pull', 500);
+    return true;
+  }
 
   // ---- API ----
   function api(path, opts) {
@@ -168,7 +217,13 @@
       if (!/^\d{6}$/.test(p)) { nt.className = 'as-note err'; nt.textContent = 'PIN must be exactly 6 digits.'; return; }
       nt.className = 'as-note'; nt.textContent = reg ? 'Creating…' : 'Logging in…';
       api('/api/auth/' + (reg ? 'register' : 'login'), { body: reg ? { username: u, pin: p, email: e } : { username: u, pin: p } })
-        .then(function (res) { setSession(res); ls(NAMEK, res.username); if (pendingBest > 0) submit(pendingBest); render(); })
+        .then(function (res) {
+          setSession(res); ls(NAMEK, res.username);
+          var g = (res.games || {})[GAME];
+          if (g && pullBest(g.best)) { nt.className = 'as-note ok'; nt.textContent = 'Signed in. Syncing your best score (' + n(g.best) + ')…'; return; }
+          if (pendingBest > 0) submit(pendingBest);
+          render();
+        })
         .catch(function (err) { nt.className = 'as-note err'; nt.textContent = err.message || 'Could not sign in.'; });
     });
   }
@@ -267,17 +322,24 @@
   function submit(best) {
     if (!token || !(best > 0)) return;
     var wk = weekId();
-    api('/api/sync', { auth: true, body: { game: GAME, best: best, week: wk, week_best: best } })
-      .then(function (r) { if (me) { me.games = me.games || {}; me.games[GAME] = { best: r.best }; } pendingBest = 0; if (btn) { btn.classList.add('on'); setTimeout(function () { if (!ov.classList.contains('show')) btn.classList.remove('on'); }, 1500); } })
-      .catch(function () {});
+    (gate || Promise.resolve(true)).then(function (ok) {
+      if (!ok) return;
+      return api('/api/sync', { auth: true, body: { game: GAME, best: best, week: wk, week_best: best, season: seasonVal } })
+        .then(function (r) { if (me) { me.games = me.games || {}; me.games[GAME] = { best: r.best }; } pendingBest = 0; if (btn) { btn.classList.add('on'); setTimeout(function () { if (!ov.classList.contains('show')) btn.classList.remove('on'); }, 1500); } })
+        .catch(function (e) { if (e && e.status === 409) gate = checkSeason(); });   // scores were reset: clear this device
+    });
   }
 
   // restore session from the token on load
   function restore() {
     token = ls(TOKENK) || null;
     if (!token) return Promise.resolve();
-    return api('/api/me', { auth: true }).then(function (u) { me = { token: token, username: u.username, games: u.games, email: u.email }; if (pendingBest > 0) submit(pendingBest); })
-      .catch(function (e) { if (e.status === 401) { token = null; ls(TOKENK, null); } });
+    return api('/api/me', { auth: true }).then(function (u) {
+      me = { token: token, username: u.username, games: u.games, email: u.email };
+      var g = (u.games || {})[GAME];
+      if (g && pullBest(g.best)) return;
+      if (pendingBest > 0) submit(pendingBest);
+    }).catch(function (e) { if (e.status === 401) { token = null; ls(TOKENK, null); } });
   }
 
   // ---- public API ----
@@ -285,8 +347,11 @@
     init: function (opts) {
       opts = opts || {};
       GAME = opts.game || GAME; API = opts.apiBase || ''; TITLE = opts.title ? (opts.title + ' Ranks') : 'Leaderboard';
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { build(); restore().then(render); });
-      else { build(); restore().then(render); }
+      BESTKEY = opts.bestKey || null;
+      gate = checkSeason();
+      var start = function () { build(); gate.then(function (ok) { return ok ? restore() : null; }).then(render); };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+      else start();
       return Account;
     },
     // call when the game knows a (possibly new) best score
